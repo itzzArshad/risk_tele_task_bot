@@ -11,7 +11,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from telegram.ext.webhookhandler import TelegramWebhookHandler
+
 
 # Load environment variables
 load_dotenv()
@@ -94,16 +94,24 @@ async def main():
     # Set webhook (Telegram side)
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
 
-    # Create aiohttp webhook handler
-    webhook_handler = TelegramWebhookHandler(application=app)
+    # Aiohttp webhook handler
+    async def handle(request):
+        data = await request.json()
+        update = Update.de_json(data, app.bot)
+        await app.process_update(update)
+        return web.Response(text="OK")
 
-    # Start aiohttp web server
+    # Run the web server on Render
     web_app = web.Application()
-    web_app.add_routes([web.post("/webhook", webhook_handler.handle)])
+    web_app.add_routes([web.post("/webhook", handle)])
     port = int(os.environ.get("PORT", 10000))
     print(f"🚀 Starting webhook on port {port}...")
-    web.run_app(web_app, port=port)
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
 
-if __name__ == "__main__":
+    # Keep running
     import asyncio
-    asyncio.run(main())
+    while True:
+        await asyncio.sleep(3600)
