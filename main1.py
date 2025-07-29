@@ -11,13 +11,13 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from telegram.ext.webhookhandler import TelegramWebhookHandler
 
 # Load environment variables
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. "https://your-app.onrender.com/webhook"
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. "https://your-app.onrender.com"
 
-# Directories to store images
 KANAN_DIR = "kanan"
 KIRI_DIR = "kiri"
 cleared_folders = False
@@ -37,7 +37,6 @@ async def save_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("❌ Caption must contain 'kanan' or 'kiri'.")
         return
 
-    # Clear old files only once
     if not cleared_folders:
         for f in [KANAN_DIR, KIRI_DIR]:
             for file in os.listdir(f):
@@ -92,12 +91,15 @@ async def main():
     app.add_handler(CommandHandler("zip", zip_and_send))
     app.add_handler(MessageHandler(filters.PHOTO & filters.Caption(), save_image))
 
-    # Set webhook (for Render)
+    # Set webhook (Telegram side)
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
 
-    # aiohttp server
+    # Create aiohttp webhook handler
+    webhook_handler = TelegramWebhookHandler(application=app)
+
+    # Start aiohttp web server
     web_app = web.Application()
-    web_app.add_routes([web.post("/webhook", app.webhook_handler())])
+    web_app.add_routes([web.post("/webhook", webhook_handler.handle)])
     port = int(os.environ.get("PORT", 10000))
     print(f"🚀 Starting webhook on port {port}...")
     web.run_app(web_app, port=port)
