@@ -15,8 +15,9 @@ from telegram.ext import (
 # Load environment variables
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. "https://your-render-url.onrender.com/webhook"
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. "https://your-app.onrender.com/webhook"
 
+# Directories to store images
 KANAN_DIR = "kanan"
 KIRI_DIR = "kiri"
 cleared_folders = False
@@ -33,15 +34,16 @@ async def save_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "kiri" in caption:
         folder = KIRI_DIR
     else:
-        await message.reply_text("Caption must contain 'kanan' or 'kiri'.")
+        await message.reply_text("❌ Caption must contain 'kanan' or 'kiri'.")
         return
 
+    # Clear old files only once
     if not cleared_folders:
         for f in [KANAN_DIR, KIRI_DIR]:
             for file in os.listdir(f):
                 os.remove(os.path.join(f, file))
         cleared_folders = True
-        await message.reply_text("Old images cleared. Starting fresh batch...")
+        await message.reply_text("🧹 Cleared old images. Ready for new batch.")
 
     if message.photo:
         photo = message.photo[-1]
@@ -51,13 +53,13 @@ async def save_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if match:
             filename_code = match.group(1)
         else:
-            await message.reply_text("Invalid caption format.")
+            await message.reply_text("❌ Invalid caption format. Use 'code kanan/kiri'")
             return
 
         filename = f"{filename_code}.jpg"
         path = os.path.join(folder, filename)
         await file.download_to_drive(path)
-        await message.reply_text(f"Saved: {filename} in {folder}/")
+        await message.reply_text(f"✅ Saved: `{filename}` in `{folder}/`", parse_mode="Markdown")
 
 async def zip_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -72,13 +74,15 @@ async def zip_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for folder in [KANAN_DIR, KIRI_DIR]:
         if os.listdir(folder):
             zip_path = zip_folder(folder)
-            await context.bot.send_document(chat_id=chat_id, document=open(zip_path, 'rb'))
+            with open(zip_path, 'rb') as zf:
+                await context.bot.send_document(chat_id=chat_id, document=zf)
         else:
-            await context.bot.send_message(chat_id=chat_id, text=f"No files in {folder}/")
+            await context.bot.send_message(chat_id=chat_id, text=f"⚠️ No files in `{folder}/`", parse_mode="Markdown")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Send me images with captions like '112-50-200 kanan' or '112+100 kiri'."
+        "👋 Send me images with captions like:\n`112-50 kanan` or `112+100 kiri`\nUse /zip to get zipped files.",
+        parse_mode="Markdown"
     )
 
 async def main():
@@ -88,14 +92,14 @@ async def main():
     app.add_handler(CommandHandler("zip", zip_and_send))
     app.add_handler(MessageHandler(filters.PHOTO & filters.Caption(), save_image))
 
-    # Set webhook for Telegram
+    # Set webhook (for Render)
     await app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
 
-    # Start aiohttp web server to handle Telegram webhook
+    # aiohttp server
     web_app = web.Application()
     web_app.add_routes([web.post("/webhook", app.webhook_handler())])
     port = int(os.environ.get("PORT", 10000))
-    print(f"Starting webhook on port {port}...")
+    print(f"🚀 Starting webhook on port {port}...")
     web.run_app(web_app, port=port)
 
 if __name__ == "__main__":
