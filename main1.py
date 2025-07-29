@@ -12,9 +12,10 @@ from telegram.ext import (
     filters,
 )
 
+# Load environment variables
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Your Render https URL
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. "https://your-render-url.onrender.com/webhook"
 
 KANAN_DIR = "kanan"
 KIRI_DIR = "kiri"
@@ -77,7 +78,7 @@ async def zip_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Forward me images with captions like '112-50-200 kanan' or '112+100 kiri'."
+        "Send me images with captions like '112-50-200 kanan' or '112+100 kiri'."
     )
 
 async def main():
@@ -87,22 +88,16 @@ async def main():
     app.add_handler(CommandHandler("zip", zip_and_send))
     app.add_handler(MessageHandler(filters.PHOTO & filters.Caption(), save_image))
 
-    # Start webhook
-    await app.bot.set_webhook(url=WEBHOOK_URL)
+    # Set webhook for Telegram
+    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
 
-    # Create aiohttp web app and attach telegram app to route
+    # Start aiohttp web server to handle Telegram webhook
     web_app = web.Application()
-    app.webhook_application = web_app
-    app.webhook_path = "/webhook"
-    app.webhook_port = int(os.getenv("PORT", 10000))
-    return app
+    web_app.add_routes([web.post("/webhook", app.webhook_handler())])
+    port = int(os.environ.get("PORT", 10000))
+    print(f"Starting webhook on port {port}...")
+    web.run_app(web_app, port=port)
 
 if __name__ == "__main__":
     import asyncio
-    from telegram.ext import Application
-
-    asyncio.run(main().start_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 10000)),
-        url_path="webhook"
-    ))
+    asyncio.run(main())
