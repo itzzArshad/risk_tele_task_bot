@@ -1,4 +1,4 @@
-import os
+import os 
 import re
 import zipfile
 import asyncio
@@ -13,7 +13,6 @@ from telegram.ext import (
     filters,
 )
 
-
 # Load environment variables
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -22,6 +21,8 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. "https://your-app.onrender.com"
 KANAN_DIR = "kanan"
 KIRI_DIR = "kiri"
 cleared_folders = False
+telegram_app = None  # global reference for use in webhook handler
+
 os.makedirs(KANAN_DIR, exist_ok=True)
 os.makedirs(KIRI_DIR, exist_ok=True)
 
@@ -85,36 +86,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+async def handle(request):
+    data = await request.json()
+    update = Update.de_json(data, telegram_app.bot)
+    await telegram_app.process_update(update)
+    return web.Response(text="OK")
+
 async def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    global telegram_app
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("zip", zip_and_send))
-    app.add_handler(MessageHandler(filters.PHOTO & filters.Caption(), save_image))
+    # Create bot app
+    telegram_app = Application.builder().token(BOT_TOKEN).build()
 
-    # Set webhook (Telegram side)
-    await app.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CommandHandler("zip", zip_and_send))
+    telegram_app.add_handler(MessageHandler(filters.PHOTO & filters.Caption(), save_image))
 
-    # Aiohttp webhook handler
-    async def handle(request):
-        data = await request.json()
-        update = Update.de_json(data, app.bot)
-        await app.process_update(update)
-        return web.Response(text="OK")
+    # Initialize and start the bot app
+    await telegram_app.initialize()
+    await telegram_app.start()
+    await telegram_app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
 
-    # Run the web server on Render
+    # Start aiohttp server
     web_app = web.Application()
     web_app.add_routes([web.post("/webhook", handle)])
+
     port = int(os.environ.get("PORT", 10000))
-    print(f"🚀 Starting webhook on port {port}...")
     runner = web.AppRunner(web_app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-    # Keep running
-   
-    while True:
-        await asyncio.sleep(3600)
+    print(f"🚀 Server started on port {port}")
+
+    # Keep running forever
+    await asyncio.Event().wait()
+
 if __name__ == "__main__":
     asyncio.run(main())
