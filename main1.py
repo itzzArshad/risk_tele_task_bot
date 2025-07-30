@@ -1,6 +1,7 @@
 import os
 import re
 import zipfile
+import asyncio
 from dotenv import load_dotenv
 from aiohttp import web
 from telegram import Update
@@ -112,7 +113,7 @@ async def main():
     await site.start()
 
     # Keep running
-    import asyncio
+   
     while True:
         await asyncio.sleep(3600)
 if __name__ == "__main__":
