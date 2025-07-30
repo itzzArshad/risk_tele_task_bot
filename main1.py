@@ -115,3 +115,5 @@ async def main():
     import asyncio
     while True:
         await asyncio.sleep(3600)
+if __name__ == "__main__":
+    asyncio.run(main())
